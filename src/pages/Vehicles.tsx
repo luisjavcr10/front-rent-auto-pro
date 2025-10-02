@@ -3,6 +3,7 @@ import { PlusIcon, PencilIcon, TrashIcon, EyeIcon } from '@heroicons/react/24/ou
 import type { Vehicle, VehicleFilters } from '../types';
 import { apiService } from '../services/api';
 import { useNotifications } from '../hooks/useNotifications';
+import VehicleForm from '../components/VehicleForm';
 
 /**
  * Página de gestión de vehículos
@@ -14,6 +15,7 @@ const Vehicles: React.FC = () => {
   const [filters, setFilters] = useState<VehicleFilters & { brand?: string; model?: string; year?: number }>({});
   const [showModal, setShowModal] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const { addNotification } = useNotifications();
 
   // Cargar vehículos al montar el componente
@@ -28,8 +30,10 @@ const Vehicles: React.FC = () => {
     try {
       setLoading(true);
       const response = await apiService.getVehicles(filters);
-      setVehicles(response.data);
+      setVehicles(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
+      console.error('Error loading vehicles:', error);
+      setVehicles([]); // Asegurar que vehicles sea siempre un array
       addNotification({
         type: 'error',
         title: 'Error',
@@ -39,6 +43,24 @@ const Vehicles: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  /**
+   * Abre el modal para editar un vehículo
+   */
+  const handleEdit = (vehicle: Vehicle) => {
+    setSelectedVehicle(vehicle);
+    setShowModal(true);
+    setShowDetailsModal(false);
+  };
+
+  /**
+   * Abre el modal para ver detalles de un vehículo
+   */
+  const handleViewDetails = (vehicle: Vehicle) => {
+    setSelectedVehicle(vehicle);
+    setShowDetailsModal(true);
+    setShowModal(false);
   };
 
   /**
@@ -117,7 +139,11 @@ const Vehicles: React.FC = () => {
           <p className="text-secondary-600 mt-2">Gestiona tu flota de vehículos</p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={() => {
+            setSelectedVehicle(null);
+            setShowModal(true);
+            setShowDetailsModal(false);
+          }}
           className="btn btn-primary flex items-center gap-2"
         >
           <PlusIcon className="w-5 h-5" />
@@ -212,7 +238,7 @@ const Vehicles: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white">
-                  {vehicles.map((vehicle, index) => (
+                  {Array.isArray(vehicles) && vehicles.map((vehicle, index) => (
                     <tr key={vehicle.id} className={index % 2 === 0 ? 'bg-white' : 'bg-secondary-50'}>
                       <td className="px-6 py-4">
                         <div>
@@ -235,17 +261,14 @@ const Vehicles: React.FC = () => {
                       <td className="px-6 py-4 text-right text-sm font-medium">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => setSelectedVehicle(vehicle)}
+                            onClick={() => handleViewDetails(vehicle)}
                             className="btn btn-sm btn-outline"
                             title="Ver detalles"
                           >
                             <EyeIcon className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => {
-                              setSelectedVehicle(vehicle);
-                              setShowModal(true);
-                            }}
+                            onClick={() => handleEdit(vehicle)}
                             className="btn btn-sm btn-secondary"
                             title="Editar"
                           >
@@ -269,74 +292,161 @@ const Vehicles: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal para crear/editar vehículo */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">
-              {selectedVehicle ? 'Editar Vehículo' : 'Nuevo Vehículo'}
-            </h3>
-            <p className="text-secondary-600 mb-4">
-              Funcionalidad de formulario pendiente de implementación
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  setShowModal(false);
-                  setSelectedVehicle(null);
-                }}
-                className="btn btn-secondary"
-              >
-                Cancelar
-              </button>
-              <button className="btn btn-primary">
-                {selectedVehicle ? 'Actualizar' : 'Crear'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Formulario para crear/editar vehículo */}
+      <VehicleForm
+        vehicle={selectedVehicle}
+        isOpen={showModal}
+        onClose={() => {
+          setShowModal(false);
+          setSelectedVehicle(null);
+        }}
+        onSuccess={() => {
+          loadVehicles();
+        }}
+      />
 
       {/* Modal de detalles */}
-      {selectedVehicle && !showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-lg">
-            <h3 className="text-lg font-semibold mb-4">Detalles del Vehículo</h3>
-            <div className="space-y-3">
-              <div>
-                <span className="font-medium">Marca:</span> {selectedVehicle.brand}
+      {selectedVehicle && showDetailsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-screen overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-xl font-semibold text-secondary-900">Detalles del Vehículo</h3>
+              <button
+                onClick={() => {
+                  setShowDetailsModal(false);
+                  setSelectedVehicle(null);
+                }}
+                className="text-secondary-400 hover:text-secondary-600"
+              >
+                <EyeIcon className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h4 className="font-semibold text-lg text-secondary-900 border-b pb-2">Información Básica</h4>
+                  <div>
+                    <span className="font-medium text-secondary-700">Marca:</span>
+                    <span className="ml-2 text-secondary-900">{selectedVehicle.brand}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-secondary-700">Modelo:</span>
+                    <span className="ml-2 text-secondary-900">{selectedVehicle.model}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-secondary-700">Año:</span>
+                    <span className="ml-2 text-secondary-900">{selectedVehicle.year}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-secondary-700">Color:</span>
+                    <span className="ml-2 text-secondary-900">{selectedVehicle.color}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-secondary-700">Placa:</span>
+                    <span className="ml-2 text-secondary-900">{selectedVehicle.license_plate}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-secondary-700">Tipo:</span>
+                    <span className="ml-2 text-secondary-900 capitalize">{selectedVehicle.vehicle_type}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-secondary-700">Estado:</span>
+                    <span className={`ml-2 font-medium ${getStatusColor(selectedVehicle.status)}`}>
+                      {getStatusText(selectedVehicle.status)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="font-semibold text-lg text-secondary-900 border-b pb-2">Especificaciones</h4>
+                  <div>
+                    <span className="font-medium text-secondary-700">Combustible:</span>
+                    <span className="ml-2 text-secondary-900 capitalize">{selectedVehicle.fuel_type}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-secondary-700">Transmisión:</span>
+                    <span className="ml-2 text-secondary-900 capitalize">{selectedVehicle.transmission}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-secondary-700">Asientos:</span>
+                    <span className="ml-2 text-secondary-900">{selectedVehicle.seats}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-secondary-700">Precio por día:</span>
+                    <span className="ml-2 text-secondary-900 font-semibold">${selectedVehicle.daily_rate.toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-secondary-700">Kilometraje:</span>
+                    <span className="ml-2 text-secondary-900">{selectedVehicle.current_mileage.toLocaleString()} km</span>
+                  </div>
+                  {selectedVehicle.vin && (
+                    <div>
+                      <span className="font-medium text-secondary-700">VIN:</span>
+                      <span className="ml-2 text-secondary-900 font-mono text-sm">{selectedVehicle.vin}</span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div>
-                <span className="font-medium">Modelo:</span> {selectedVehicle.model}
-              </div>
-              <div>
-                <span className="font-medium">Año:</span> {selectedVehicle.year}
-              </div>
-              <div>
-                <span className="font-medium">Placa:</span> {selectedVehicle.license_plate}
-              </div>
-              <div>
-                <span className="font-medium">Tipo:</span> {selectedVehicle.vehicle_type}
-              </div>
-              <div>
-                <span className="font-medium">Estado:</span>{' '}
-                <span className={getStatusColor(selectedVehicle.status)}>
-                  {getStatusText(selectedVehicle.status)}
-                </span>
-              </div>
-              <div>
-                <span className="font-medium">Precio por día:</span> ${selectedVehicle.daily_rate.toLocaleString()}
-              </div>
+
+              {/* Fechas importantes */}
+              {(selectedVehicle.purchase_date || selectedVehicle.insurance_expiry || selectedVehicle.registration_expiry) && (
+                <div className="mt-6 pt-6 border-t">
+                  <h4 className="font-semibold text-lg text-secondary-900 mb-4">Fechas Importantes</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {selectedVehicle.purchase_date && (
+                      <div>
+                        <span className="font-medium text-secondary-700">Compra:</span>
+                        <span className="ml-2 text-secondary-900">
+                          {new Date(selectedVehicle.purchase_date).toLocaleDateString()}
+                        </span>
+                      </div>
+                    )}
+                    {selectedVehicle.insurance_expiry && (
+                      <div>
+                        <span className="font-medium text-secondary-700">Venc. Seguro:</span>
+                        <span className="ml-2 text-secondary-900">
+                          {new Date(selectedVehicle.insurance_expiry).toLocaleDateString()}
+                        </span>
+                      </div>
+                    )}
+                    {selectedVehicle.registration_expiry && (
+                      <div>
+                        <span className="font-medium text-secondary-700">Venc. Registro:</span>
+                        <span className="ml-2 text-secondary-900">
+                          {new Date(selectedVehicle.registration_expiry).toLocaleDateString()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Notas */}
               {selectedVehicle.notes && (
-                <div>
-                  <span className="font-medium">Notas:</span> {selectedVehicle.notes}
+                <div className="mt-6 pt-6 border-t">
+                  <h4 className="font-semibold text-lg text-secondary-900 mb-2">Notas</h4>
+                  <p className="text-secondary-700 bg-secondary-50 p-4 rounded-lg">{selectedVehicle.notes}</p>
                 </div>
               )}
             </div>
-            <div className="flex justify-end mt-6">
+
+            <div className="flex justify-end gap-3 p-6 border-t">
               <button
-                onClick={() => setSelectedVehicle(null)}
+                onClick={() => {
+                  setShowDetailsModal(false);
+                  handleEdit(selectedVehicle);
+                }}
                 className="btn btn-secondary"
+              >
+                Editar
+              </button>
+              <button
+                onClick={() => {
+                  setShowDetailsModal(false);
+                  setSelectedVehicle(null);
+                }}
+                className="btn btn-primary"
               >
                 Cerrar
               </button>

@@ -22,7 +22,7 @@ import {
  * Componente de sidebar
  */
 const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const location = useLocation();
+  //const location = useLocation();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 

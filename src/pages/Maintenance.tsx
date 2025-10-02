@@ -3,6 +3,8 @@ import { PlusIcon, PencilIcon, CheckIcon, EyeIcon } from '@heroicons/react/24/ou
 import type { Maintenance } from '../types';
 import { apiService } from '../services/api';
 import { useNotifications } from '../hooks/useNotifications';
+import { usePermissions } from '../hooks/usePermissions';
+import MaintenanceForm from '../components/MaintenanceForm';
 
 /**
  * Página de gestión de mantenimiento
@@ -16,9 +18,11 @@ const MaintenancePage: React.FC = () => {
     priority?: string;
     vehicle_id?: string;
   }>({});
-  const [showModal, setShowModal] = useState(false);
   const [selectedMaintenance, setSelectedMaintenance] = useState<Maintenance | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingMaintenance, setEditingMaintenance] = useState<Maintenance | null>(null);
   const { addNotification } = useNotifications();
+  const permissions = usePermissions();
 
   // Cargar mantenimientos al montar el componente
   useEffect(() => {
@@ -32,8 +36,11 @@ const MaintenancePage: React.FC = () => {
     try {
       setLoading(true);
       const response = await apiService.getMaintenances(filters);
-      setMaintenances(response.data);
+      // La respuesta es PaginatedResponse<Maintenance>, así que response.data ya es Maintenance[]
+      setMaintenances(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
+      console.error('Error loading maintenances:', error);
+      setMaintenances([]); // Asegurar que maintenances sea siempre un array
       addNotification({
         type: 'error',
         title: 'Error',
@@ -73,6 +80,39 @@ const MaintenancePage: React.FC = () => {
         read: false
       });
     }
+  };
+
+  /**
+   * Abre el formulario para crear un nuevo mantenimiento
+   */
+  const handleCreateMaintenance = () => {
+    setEditingMaintenance(null);
+    setShowForm(true);
+  };
+
+  /**
+   * Abre el formulario para editar un mantenimiento existente
+   */
+  const handleEditMaintenance = (maintenance: Maintenance) => {
+    setEditingMaintenance(maintenance);
+    setShowForm(true);
+  };
+
+  /**
+   * Maneja el éxito del formulario (crear/editar)
+   */
+  const handleFormSuccess = () => {
+    setShowForm(false);
+    setEditingMaintenance(null);
+    loadMaintenances(); // Recargar la lista de mantenimientos
+  };
+
+  /**
+   * Cierra el formulario
+   */
+  const handleCloseForm = () => {
+    setShowForm(false);
+    setEditingMaintenance(null);
   };
 
   /**
@@ -179,13 +219,15 @@ const MaintenancePage: React.FC = () => {
           <h1 className="text-3xl font-bold text-secondary-900">Mantenimiento</h1>
           <p className="text-secondary-600 mt-2">Gestiona el mantenimiento de la flota</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="btn btn-primary flex items-center gap-2"
-        >
-          <PlusIcon className="w-5 h-5" />
-          Nuevo Mantenimiento
-        </button>
+        {permissions.canCreateMaintenance && (
+          <button
+            onClick={handleCreateMaintenance}
+            className="btn btn-primary flex items-center gap-2"
+          >
+            <PlusIcon className="w-5 h-5" />
+            Nuevo Mantenimiento
+          </button>
+        )}
       </div>
 
       {/* Filtros */}
@@ -317,16 +359,15 @@ const MaintenancePage: React.FC = () => {
                           >
                             <EyeIcon className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => {
-                              setSelectedMaintenance(maintenance);
-                              setShowModal(true);
-                            }}
-                            className="btn btn-sm btn-secondary"
-                            title="Editar"
-                          >
-                            <PencilIcon className="w-4 h-4" />
-                          </button>
+                          {permissions.canEditMaintenance && (
+                            <button
+                              onClick={() => handleEditMaintenance(maintenance)}
+                              className="btn btn-sm btn-secondary"
+                              title="Editar"
+                            >
+                              <PencilIcon className="w-4 h-4" />
+                            </button>
+                          )}
                           {maintenance.status !== 'completed' && (
                             <button
                               onClick={() => handleComplete(maintenance.id)}
@@ -347,36 +388,17 @@ const MaintenancePage: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal para crear/editar mantenimiento */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">
-              {selectedMaintenance ? 'Editar Mantenimiento' : 'Nuevo Mantenimiento'}
-            </h3>
-            <p className="text-secondary-600 mb-4">
-              Funcionalidad de formulario pendiente de implementación
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  setShowModal(false);
-                  setSelectedMaintenance(null);
-                }}
-                className="btn btn-secondary"
-              >
-                Cancelar
-              </button>
-              <button className="btn btn-primary">
-                {selectedMaintenance ? 'Actualizar' : 'Crear'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Formulario para crear/editar mantenimiento */}
+      {showForm && (
+        <MaintenanceForm
+          maintenance={editingMaintenance}
+          onSuccess={handleFormSuccess}
+          onCancel={handleCloseForm}
+        />
       )}
 
       {/* Modal de detalles */}
-      {selectedMaintenance && !showModal && (
+      {selectedMaintenance && !showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
             <h3 className="text-lg font-semibold mb-4">Detalles del Mantenimiento</h3>

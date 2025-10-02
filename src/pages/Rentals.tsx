@@ -3,6 +3,8 @@ import { PlusIcon, PencilIcon, TrashIcon, EyeIcon } from '@heroicons/react/24/ou
 import type { Rental, RentalFilters } from '../types';
 import { apiService } from '../services/api';
 import { useNotifications } from '../hooks/useNotifications';
+import { usePermissions } from '../hooks/usePermissions';
+import RentalForm from '../components/RentalForm';
 
 /**
  * Página de gestión de rentas
@@ -12,9 +14,11 @@ const Rentals: React.FC = () => {
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<RentalFilters>({});
-  const [showModal, setShowModal] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [editingRental, setEditingRental] = useState<Rental | null>(null);
   const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
   const { addNotification } = useNotifications();
+  const permissions = usePermissions();
 
   // Cargar rentas al montar el componente
   useEffect(() => {
@@ -28,8 +32,11 @@ const Rentals: React.FC = () => {
     try {
       setLoading(true);
       const response = await apiService.getRentals(filters);
-      setRentals(response.data);
+      // La respuesta es PaginatedResponse<Rental>, así que response.data ya es Rental[]
+      setRentals(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
+      console.error('Error loading rentals:', error);
+      setRentals([]); // Asegurar que rentals sea siempre un array
       addNotification({
         type: 'error',
         title: 'Error',
@@ -66,6 +73,39 @@ const Rentals: React.FC = () => {
         read: false
       });
     }
+  };
+
+  /**
+   * Abre el formulario para crear una nueva renta
+   */
+  const handleCreateRental = () => {
+    setEditingRental(null);
+    setShowForm(true);
+  };
+
+  /**
+   * Abre el formulario para editar una renta existente
+   */
+  const handleEditRental = (rental: Rental) => {
+    setEditingRental(rental);
+    setShowForm(true);
+  };
+
+  /**
+   * Maneja el éxito del formulario (crear/editar)
+   */
+  const handleFormSuccess = () => {
+    setShowForm(false);
+    setEditingRental(null);
+    loadRentals(); // Recargar la lista de rentas
+  };
+
+  /**
+   * Cierra el formulario
+   */
+  const handleCloseForm = () => {
+    setShowForm(false);
+    setEditingRental(null);
   };
 
   /**
@@ -156,13 +196,15 @@ const Rentals: React.FC = () => {
           <h1 className="text-3xl font-bold text-secondary-900">Rentas</h1>
           <p className="text-secondary-600 mt-2">Gestiona las rentas de vehículos</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="btn btn-primary flex items-center gap-2"
-        >
-          <PlusIcon className="w-5 h-5" />
-          Nueva Renta
-        </button>
+        {permissions.canCreateRentals && (
+          <button
+            onClick={handleCreateRental}
+            className="btn btn-primary flex items-center gap-2"
+          >
+            <PlusIcon className="w-5 h-5" />
+            Nueva Renta
+          </button>
+        )}
       </div>
 
       {/* Filtros */}
@@ -305,16 +347,15 @@ const Rentals: React.FC = () => {
                           >
                             <EyeIcon className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => {
-                              setSelectedRental(rental);
-                              setShowModal(true);
-                            }}
-                            className="btn btn-sm btn-secondary"
-                            title="Editar"
-                          >
-                            <PencilIcon className="w-4 h-4" />
-                          </button>
+                          {permissions.canEditRentals && (
+                            <button
+                              onClick={() => handleEditRental(rental)}
+                              className="btn btn-sm btn-secondary"
+                              title="Editar"
+                            >
+                              <PencilIcon className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleCancel(rental.id)}
                             className="btn btn-sm bg-error text-white hover:bg-red-700"
@@ -333,36 +374,18 @@ const Rentals: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal para crear/editar renta */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">
-              {selectedRental ? 'Editar Renta' : 'Nueva Renta'}
-            </h3>
-            <p className="text-secondary-600 mb-4">
-              Funcionalidad de formulario pendiente de implementación
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  setShowModal(false);
-                  setSelectedRental(null);
-                }}
-                className="btn btn-secondary"
-              >
-                Cancelar
-              </button>
-              <button className="btn btn-primary">
-                {selectedRental ? 'Actualizar' : 'Crear'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Formulario para crear/editar renta */}
+      {showForm && (
+        <RentalForm
+          isOpen={showForm}
+          rental={editingRental}
+          onSuccess={handleFormSuccess}
+          onCancel={handleCloseForm}
+        />
       )}
 
       {/* Modal de detalles */}
-      {selectedRental && !showModal && (
+      {selectedRental && !showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
             <h3 className="text-lg font-semibold mb-4">Detalles de la Renta</h3>

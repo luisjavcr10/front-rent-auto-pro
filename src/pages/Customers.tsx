@@ -3,6 +3,8 @@ import { PlusIcon, PencilIcon, TrashIcon, EyeIcon } from '@heroicons/react/24/ou
 import type { Customer } from '../types';
 import { apiService } from '../services/api';
 import { useNotifications } from '../hooks/useNotifications';
+import { useAuth } from '../context/AuthContext';
+import CustomerForm from '../components/CustomerForm';
 
 /**
  * Página de gestión de clientes
@@ -12,9 +14,17 @@ const Customers: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showModal, setShowModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const { addNotification } = useNotifications();
+  const { user } = useAuth();
+  const role = user?.role;
+  // Permisos simples por rol: cliente NO crea/edita/elimina
+  const canViewCustomers = role === 'admin' || role === 'gestor_flota' || role === 'cliente';
+  const canCreateCustomers = role === 'admin' || role === 'gestor_flota';
+  const canEditCustomers = role === 'admin' || role === 'gestor_flota';
+  const canDeleteCustomers = role === 'admin';
 
   // Cargar clientes al montar el componente
   useEffect(() => {
@@ -28,8 +38,11 @@ const Customers: React.FC = () => {
     try {
       setLoading(true);
       const response = await apiService.getCustomers({ search: searchTerm });
-      setCustomers(response.data);
+      // La respuesta es PaginatedResponse<Customer>, así que response.data ya es Customer[]
+      setCustomers(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
+      console.error('Error loading customers:', error);
+      setCustomers([]); // Asegurar que customers sea siempre un array
       addNotification({
         type: 'error',
         title: 'Error',
@@ -42,30 +55,64 @@ const Customers: React.FC = () => {
   };
 
   /**
-   * Maneja la eliminación de un cliente
+   * Elimina un cliente
    */
-  const handleDelete = async (id: string) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar este cliente?')) {
+  const handleDeleteCustomer = async (customerId: string) => {
+    if (!window.confirm('¿Estás seguro de que quieres eliminar este cliente?')) {
       return;
     }
 
     try {
-      await apiService.deleteCustomer(id);
+      await apiService.deleteCustomer(customerId);
+      setCustomers(customers.filter(customer => customer.id !== customerId));
       addNotification({
         type: 'success',
         title: 'Éxito',
-        message: 'Cliente eliminado correctamente',
+        message: 'Cliente eliminado exitosamente',
         read: false
       });
-      loadCustomers();
     } catch (error) {
+      console.error('Error al eliminar cliente:', error);
       addNotification({
         type: 'error',
         title: 'Error',
-        message: 'No se pudo eliminar el cliente',
+        message: 'Error al eliminar cliente',
         read: false
       });
     }
+  };
+
+  /**
+   * Abre el formulario para crear un nuevo cliente
+   */
+  const handleCreateCustomer = () => {
+    setEditingCustomer(null);
+    setShowForm(true);
+  };
+
+  /**
+   * Abre el formulario para editar un cliente existente
+   */
+  const handleEditCustomer = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setShowForm(true);
+  };
+
+  /**
+   * Maneja el éxito del formulario (crear/editar)
+   */
+  const handleFormSuccess = () => {
+    setShowForm(false);
+    setEditingCustomer(null);
+    loadCustomers(); // Recargar la lista de clientes
+  };
+
+  /**
+   * Cierra el formulario
+   */
+  const handleCloseForm = () => {
+    setShowForm(false);
+    setEditingCustomer(null);
   };
 
   /**
@@ -109,13 +156,15 @@ const Customers: React.FC = () => {
           <h1 className="text-3xl font-bold text-secondary-900">Clientes</h1>
           <p className="text-secondary-600 mt-2">Gestiona tu base de clientes</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="btn btn-primary flex items-center gap-2"
-        >
-          <PlusIcon className="w-5 h-5" />
-          Nuevo Cliente
-        </button>
+        {canCreateCustomers && (
+          <button
+            onClick={handleCreateCustomer}
+            className="btn btn-primary flex items-center gap-2"
+          >
+            <PlusIcon className="w-5 h-5" />
+            Nuevo Cliente
+          </button>
+        )}
       </div>
 
       {/* Barra de búsqueda */}
@@ -193,30 +242,33 @@ const Customers: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 text-right text-sm font-medium">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => setSelectedCustomer(customer)}
-                            className="btn btn-sm btn-outline"
-                            title="Ver detalles"
-                          >
-                            <EyeIcon className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedCustomer(customer);
-                              setShowModal(true);
-                            }}
-                            className="btn btn-sm btn-secondary"
-                            title="Editar"
-                          >
-                            <PencilIcon className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(customer.id)}
-                            className="btn btn-sm bg-error text-white hover:bg-red-700"
-                            title="Eliminar"
-                          >
-                            <TrashIcon className="w-4 h-4" />
-                          </button>
+                          {canViewCustomers && (
+                            <button
+                              onClick={() => setSelectedCustomer(customer)}
+                              className="btn btn-sm btn-outline"
+                              title="Ver detalles"
+                            >
+                              <EyeIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                          {canEditCustomers && (
+                            <button
+                              onClick={() => handleEditCustomer(customer)}
+                              className="btn btn-sm btn-secondary"
+                              title="Editar"
+                            >
+                              <PencilIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                          {canDeleteCustomers && (
+                            <button
+                              onClick={() => handleDeleteCustomer(customer.id)}
+                              className="btn btn-sm bg-error text-white hover:bg-red-700"
+                              title="Eliminar"
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -228,36 +280,17 @@ const Customers: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal para crear/editar cliente */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">
-              {selectedCustomer ? 'Editar Cliente' : 'Nuevo Cliente'}
-            </h3>
-            <p className="text-secondary-600 mb-4">
-              Funcionalidad de formulario pendiente de implementación
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  setShowModal(false);
-                  setSelectedCustomer(null);
-                }}
-                className="btn btn-secondary"
-              >
-                Cancelar
-              </button>
-              <button className="btn btn-primary">
-                {selectedCustomer ? 'Actualizar' : 'Crear'}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Formulario para crear/editar cliente */}
+      {showForm && (
+        <CustomerForm
+          customer={editingCustomer}
+          onSuccess={handleFormSuccess}
+          onCancel={handleCloseForm}
+        />
       )}
 
       {/* Modal de detalles */}
-      {selectedCustomer && !showModal && (
+      {selectedCustomer && !showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-lg">
             <h3 className="text-lg font-semibold mb-4">Detalles del Cliente</h3>

@@ -1,5 +1,5 @@
 /**
- * Servicio de API para comunicarse con el backend
+ * Servicio de API para comunicarse con el backend local
  */
 import axios from 'axios';
 import type { AxiosInstance, AxiosResponse } from 'axios';
@@ -41,9 +41,12 @@ class ApiService {
     this.api.interceptors.request.use(
       (config) => {
         const token = localStorage.getItem('token');
-        if (token) {
+
+        // Validar que el token sea válido antes de enviarlo
+        if (token && token !== 'undefined' && token !== 'null' && token.trim() !== '') {
           config.headers.Authorization = `Bearer ${token}`;
         }
+
         return config;
       },
       (error) => {
@@ -68,6 +71,37 @@ class ApiService {
     );
   }
 
+  /**
+   * Normaliza respuestas paginadas desde distintos esquemas del backend
+   * Acepta formas como:
+   * - { data: T[], pagination }
+   * - { customers|vehicles|rentals|maintenances: T[], pagination }
+   * - { data: { customers|vehicles|rentals|maintenances: T[], pagination } }
+   */
+  private normalizePaginated<T>(payload: any, key: string): PaginatedResponse<T> {
+    const items: T[] = Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.[key])
+        ? payload[key]
+        : Array.isArray(payload?.data?.[key])
+          ? payload.data[key]
+          : [];
+
+    const pagination = payload?.pagination
+      ?? payload?.data?.pagination
+      ?? {
+        page: typeof payload?.page === 'number' ? payload.page : 1,
+        limit: typeof payload?.limit === 'number' ? payload.limit : (Array.isArray(items) ? items.length : 0),
+        total: typeof payload?.total === 'number' ? payload.total : (Array.isArray(items) ? items.length : 0),
+        totalPages: typeof payload?.totalPages === 'number' ? payload.totalPages : 1,
+      };
+
+    const success = typeof payload?.success === 'boolean' ? payload.success : true;
+    const message = typeof payload?.message === 'string' ? payload.message : '';
+
+    return { success, message, data: items, pagination };
+  }
+
   // Métodos de autenticación
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     const response = await this.api.post<AuthResponse>('/auth/login', credentials);
@@ -80,8 +114,14 @@ class ApiService {
   }
 
   async getProfile(): Promise<ApiResponse<User>> {
-    const response = await this.api.get<ApiResponse<User>>('/auth/profile');
-    return response.data;
+    const response = await this.api.get('/auth/profile');
+    const payload = response.data || {};
+    const user: User = payload?.data?.user ?? payload?.user ?? payload?.data;
+    return {
+      success: typeof payload.success === 'boolean' ? payload.success : true,
+      message: typeof payload.message === 'string' ? payload.message : '',
+      data: user,
+    };
   }
 
   async updateProfile(data: Partial<User>): Promise<ApiResponse<User>> {
@@ -96,8 +136,8 @@ class ApiService {
 
   // Métodos de vehículos
   async getVehicles(filters?: VehicleFilters & { page?: number; limit?: number }): Promise<PaginatedResponse<Vehicle>> {
-    const response = await this.api.get<PaginatedResponse<Vehicle>>('/vehicles', { params: filters });
-    return response.data;
+    const response = await this.api.get('/vehicles', { params: filters });
+    return this.normalizePaginated<Vehicle>(response.data, 'vehicles');
   }
 
   async getVehicleById(id: string): Promise<ApiResponse<Vehicle>> {
@@ -121,10 +161,22 @@ class ApiService {
   }
 
   async getAvailableVehicles(startDate: string, endDate: string): Promise<ApiResponse<Vehicle[]>> {
-    const response = await this.api.get<ApiResponse<Vehicle[]>>('/vehicles/available', {
+    const response = await this.api.get('/vehicles/available', {
       params: { start_date: startDate, end_date: endDate }
     });
-    return response.data;
+    const payload = response.data;
+    const vehicles: Vehicle[] = Array.isArray(payload?.data?.vehicles)
+      ? payload.data.vehicles
+      : Array.isArray(payload?.vehicles)
+        ? payload.vehicles
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : [];
+    return {
+      success: typeof payload?.success === 'boolean' ? payload.success : true,
+      message: typeof payload?.message === 'string' ? payload.message : '',
+      data: vehicles,
+    };
   }
 
   async updateVehicleMileage(id: string, mileage: number): Promise<ApiResponse<Vehicle>> {
@@ -134,8 +186,8 @@ class ApiService {
 
   // Métodos de clientes
   async getCustomers(filters?: { search?: string; page?: number; limit?: number }): Promise<PaginatedResponse<Customer>> {
-    const response = await this.api.get<PaginatedResponse<Customer>>('/customers', { params: filters });
-    return response.data;
+    const response = await this.api.get('/customers', { params: filters });
+    return this.normalizePaginated<Customer>(response.data, 'customers');
   }
 
   async getCustomerById(id: string): Promise<ApiResponse<Customer>> {
@@ -160,8 +212,8 @@ class ApiService {
 
   // Métodos de alquileres
   async getRentals(filters?: RentalFilters & { page?: number; limit?: number }): Promise<PaginatedResponse<Rental>> {
-    const response = await this.api.get<PaginatedResponse<Rental>>('/rentals', { params: filters });
-    return response.data;
+    const response = await this.api.get('/rentals', { params: filters });
+    return this.normalizePaginated<Rental>(response.data, 'rentals');
   }
 
   async getRentalById(id: string): Promise<ApiResponse<Rental>> {
@@ -194,6 +246,11 @@ class ApiService {
     return response.data;
   }
 
+  async startRental(id: string): Promise<ApiResponse<Rental>> {
+    const response = await this.api.put<ApiResponse<Rental>>(`/rentals/${id}/start`);
+    return response.data;
+  }
+
   // Métodos de mantenimiento
   async getMaintenances(filters?: { 
     vehicle_id?: string; 
@@ -202,8 +259,8 @@ class ApiService {
     page?: number; 
     limit?: number; 
   }): Promise<PaginatedResponse<Maintenance>> {
-    const response = await this.api.get<PaginatedResponse<Maintenance>>('/maintenances', { params: filters });
-    return response.data;
+    const response = await this.api.get('/maintenances', { params: filters });
+    return this.normalizePaginated<Maintenance>(response.data, 'maintenances');
   }
 
   async getMaintenanceById(id: string): Promise<ApiResponse<Maintenance>> {
@@ -250,6 +307,11 @@ class ApiService {
     return response.data;
   }
 
+  async startMaintenance(id: string): Promise<ApiResponse<Maintenance>> {
+    const response = await this.api.put<ApiResponse<Maintenance>>(`/maintenances/${id}/start`);
+    return response.data;
+  }
+
   // Métodos de estadísticas y dashboard
   async getDashboardStats(): Promise<ApiResponse<DashboardStats>> {
     const response = await this.api.get<ApiResponse<DashboardStats>>('/dashboard/stats');
@@ -267,8 +329,8 @@ class ApiService {
 
   // Métodos de usuarios (solo para admin)
   async getUsers(filters?: { search?: string; role?: string; page?: number; limit?: number }): Promise<PaginatedResponse<User>> {
-    const response = await this.api.get<PaginatedResponse<User>>('/auth/users', { params: filters });
-    return response.data;
+    const response = await this.api.get('/auth/users', { params: filters });
+    return this.normalizePaginated<User>(response.data, 'users');
   }
 
   async updateUser(id: string, data: Partial<User>): Promise<ApiResponse<User>> {
@@ -287,6 +349,17 @@ class ApiService {
         'Content-Type': 'multipart/form-data',
       },
     });
+    return response.data;
+  }
+
+  // Test methods for debugging
+  async testAuth(): Promise<ApiResponse<any>> {
+    const response = await this.api.get('/auth/test-auth');
+    return response.data;
+  }
+
+  async testAdmin(): Promise<ApiResponse<any>> {
+    const response = await this.api.get('/auth/test-admin');
     return response.data;
   }
 }

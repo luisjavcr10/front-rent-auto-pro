@@ -4,12 +4,15 @@ import type { Vehicle, VehicleFilters } from '../types';
 import { apiService } from '../services/api';
 import { useNotifications } from '../hooks/useNotifications';
 import VehicleForm from '../components/VehicleForm';
+import { useAuth } from '../context/AuthContext';
 
 /**
  * Página de gestión de vehículos
  * Permite listar, filtrar, crear, editar y eliminar vehículos
  */
 const Vehicles: React.FC = () => {
+  const { user } = useAuth();
+  const role = user?.role;
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<VehicleFilters & { brand?: string; model?: string; year?: number }>({});
@@ -17,6 +20,8 @@ const Vehicles: React.FC = () => {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const { addNotification } = useNotifications();
+
+  const canCreateVehicles = role === 'admin' || role === 'gestor_flota';
 
   // Cargar vehículos al montar el componente
   useEffect(() => {
@@ -138,7 +143,7 @@ const Vehicles: React.FC = () => {
           <h1 className="text-3xl font-bold text-secondary-900">Vehículos</h1>
           <p className="text-secondary-600 mt-2">Gestiona tu flota de vehículos</p>
         </div>
-        <button
+        {canCreateVehicles &&( <button
           onClick={() => {
             setSelectedVehicle(null);
             setShowModal(true);
@@ -148,7 +153,7 @@ const Vehicles: React.FC = () => {
         >
           <PlusIcon className="w-5 h-5" />
           Nuevo Vehículo
-        </button>
+        </button>)}
       </div>
 
       {/* Filtros */}

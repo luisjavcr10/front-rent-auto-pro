@@ -5,6 +5,8 @@ import { apiService } from '../services/api';
 import { useNotifications } from '../hooks/useNotifications';
 import { usePermissions } from '../hooks/usePermissions';
 import RentalForm from '../components/RentalForm';
+import RentalPDFGenerator from '../components/RentalPDFGenerator';
+import { useAuth } from '../context/AuthContext';
 
 /**
  * Página de gestión de rentas
@@ -17,8 +19,14 @@ const Rentals: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingRental, setEditingRental] = useState<Rental | null>(null);
   const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
+  const [newlyCreatedRental, setNewlyCreatedRental] = useState<Rental | null>(null);
   const { addNotification } = useNotifications();
   const permissions = usePermissions();
+  const { user } = useAuth();
+  const role = user?.role;
+
+
+  const canCreateRentals = role === 'cliente';
 
   // Cargar rentas al montar el componente
   useEffect(() => {
@@ -94,9 +102,15 @@ const Rentals: React.FC = () => {
   /**
    * Maneja el éxito del formulario (crear/editar)
    */
-  const handleFormSuccess = () => {
+  const handleFormSuccess = (createdRental?: Rental) => {
     setShowForm(false);
     setEditingRental(null);
+    
+    // Si se creó una nueva renta, mostrar opción de generar PDF
+    if (createdRental) {
+      setNewlyCreatedRental(createdRental);
+    }
+    
     loadRentals(); // Recargar la lista de rentas
   };
 
@@ -196,7 +210,7 @@ const Rentals: React.FC = () => {
           <h1 className="text-3xl font-bold text-secondary-900">Rentas</h1>
           <p className="text-secondary-600 mt-2">Gestiona las rentas de vehículos</p>
         </div>
-        {permissions.canCreateRentals && (
+        {canCreateRentals && (
           <button
             onClick={handleCreateRental}
             className="btn btn-primary flex items-center gap-2"
@@ -384,8 +398,45 @@ const Rentals: React.FC = () => {
         />
       )}
 
+      {/* Modal de renta creada exitosamente */}
+      {newlyCreatedRental && !showForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4 text-center">¡Renta Creada Exitosamente!</h3>
+            <div className="text-center mb-6">
+              <p className="text-secondary-600 mb-2">
+                La renta <strong>{newlyCreatedRental.rental_number}</strong> ha sido creada correctamente.
+              </p>
+              <p className="text-secondary-600">
+                ¿Deseas generar un reporte PDF con todos los detalles de la renta?
+              </p>
+            </div>
+            <div className="flex justify-center space-x-4">
+              <RentalPDFGenerator 
+                rental={newlyCreatedRental}
+                onGenerate={() => {
+                  addNotification({
+                    type: 'success',
+                    title: 'PDF Generado',
+                    message: 'El reporte PDF se ha descargado correctamente',
+                    read: false
+                  });
+                  setNewlyCreatedRental(null);
+                }}
+              />
+              <button
+                onClick={() => setNewlyCreatedRental(null)}
+                className="btn btn-secondary"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de detalles */}
-      {selectedRental && !showForm && (
+      {selectedRental && !showForm && !newlyCreatedRental && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
             <h3 className="text-lg font-semibold mb-4">Detalles de la Renta</h3>
@@ -445,7 +496,18 @@ const Rentals: React.FC = () => {
                 <p className="text-secondary-600 mt-1">{selectedRental.additional_notes}</p>
               </div>
             )}
-            <div className="flex justify-end mt-6">
+            <div className="flex justify-between mt-6">
+              <RentalPDFGenerator 
+                rental={selectedRental}
+                onGenerate={() => {
+                  addNotification({
+                    type: 'success',
+                    title: 'PDF Generado',
+                    message: 'El reporte PDF se ha descargado correctamente',
+                    read: false
+                  });
+                }}
+              />
               <button
                 onClick={() => setSelectedRental(null)}
                 className="btn btn-secondary"

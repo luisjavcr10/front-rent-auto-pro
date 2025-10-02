@@ -12,6 +12,7 @@ import {
   UsersIcon,
   DocumentTextIcon,
   WrenchScrewdriverIcon,
+  ChartBarIcon,
   Bars3Icon,
   XMarkIcon,
   ArrowRightOnRectangleIcon,
@@ -32,6 +33,7 @@ const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, o
     { name: 'Clientes', href: '/customers', icon: UsersIcon },
     { name: 'Alquileres', href: '/rentals', icon: DocumentTextIcon },
     { name: 'Mantenimiento', href: '/maintenance', icon: WrenchScrewdriverIcon },
+    { name: 'Reportes', href: '/reports', icon: ChartBarIcon },
   ];
 
   const handleLogout = async () => {

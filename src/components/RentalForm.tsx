@@ -10,7 +10,7 @@ import { useNotifications } from '../hooks/useNotifications';
 interface RentalFormProps {
   rental?: Rental | null;
   isOpen: boolean;
-  onSuccess: () => void;
+  onSuccess: (createdRental?: Rental) => void;
   onCancel: () => void;
 }
 
@@ -204,6 +204,8 @@ const RentalForm: React.FC<RentalFormProps> = ({
     setLoading(true);
 
     try {
+      let createdRental: Rental | undefined;
+      
       if (rental) {
         // Actualizar alquiler existente
         await apiService.updateRental(rental.id, formData);
@@ -215,7 +217,8 @@ const RentalForm: React.FC<RentalFormProps> = ({
         });
       } else {
         // Crear nuevo alquiler
-        await apiService.createRental(formData);
+        const response = await apiService.createRental(formData);
+        createdRental = response.data;
         addNotification({
           type: 'success',
           title: 'Éxito',
@@ -224,7 +227,7 @@ const RentalForm: React.FC<RentalFormProps> = ({
         });
       }
       
-      onSuccess();
+      onSuccess(createdRental);
       onCancel();
     } catch (error: any) {
       addNotification({
@@ -242,7 +245,14 @@ const RentalForm: React.FC<RentalFormProps> = ({
 
   const days = calculateDays();
   const total = calculateTotal();
-  const vehiclesToShow = rental ? vehicles : availableVehicles;
+  
+  // Para editar: mostrar todos los vehículos
+  // Para nuevo alquiler: mostrar vehículos disponibles si hay fechas, sino todos los vehículos
+  const vehiclesToShow = rental 
+    ? vehicles 
+    : (formData.start_date && formData.end_date && availableVehicles.length > 0) 
+      ? availableVehicles 
+      : vehicles;
 
   return (
     <div className="modal-overlay">

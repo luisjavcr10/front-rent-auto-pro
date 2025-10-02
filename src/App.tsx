@@ -12,6 +12,7 @@ import Vehicles from './pages/Vehicles';
 import Customers from './pages/Customers';
 import Rentals from './pages/Rentals';
 import Maintenance from './pages/Maintenance';
+import Reports from './pages/Reports';
 
 /**
  * Componente de rutas de la aplicación
@@ -52,6 +53,9 @@ const AppRoutes: React.FC = () => {
         
         {/* Páginas de mantenimiento */}
         <Route path="maintenance" element={<Maintenance />} />
+        
+        {/* Páginas de reportes */}
+        <Route path="reports" element={<Reports />} />
       </Route>
 
       {/* Ruta por defecto - redirigir a dashboard */}
